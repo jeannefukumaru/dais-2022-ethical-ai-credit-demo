@@ -9,9 +9,8 @@ import os
 
 load_dotenv()
 
-REPO_URL = "jeannefukumaru/db-registry-to-gh-actions"
-GH_TOKEN = os.getenv("GH_TOKEN")   # eg. org/repo
-GH_TOKEN = "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"    #github token
+REPO_URL = "jeannefukumaru/dais-2022-ethical-ai-credit-demo" # eg. org/repo
+GH_TOKEN = os.getenv("GH_TOKEN")   #github token
 EVENT_NAME = "comment" #mandatory name for the event. can be dynamically provided  
 
 
