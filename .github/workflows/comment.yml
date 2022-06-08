@@ -1,7 +1,7 @@
 name: comment
 
 on:
-  [repository_dispatch]
+  [push]
   
 jobs:
   post_comment:
