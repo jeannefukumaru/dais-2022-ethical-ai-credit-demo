@@ -1,39 +1,17 @@
 # Databricks notebook source
-# Databricks notebook source
-dbutils.widgets.text(name = "model_name", defaultValue = "unknown model", label = "Model Name")
-dbutils.widgets.text(name = "version", defaultValue="-1",label = "Version")
-dbutils.widgets.text(name = "stage", defaultValue="Unknown",label = "To Stage")
-dbutils.widgets.text(name = "timestamp", defaultValue="0",label = "Version")
-dbutils.widgets.text(name = "text", defaultValue="",label = "Version")
-dbutils.widgets.text(name = "webhook_id", defaultValue="",label = "Version")
-dbutils.widgets.text(name = "description", defaultValue="", label= "run_id")
-
+import json
+registry_event = json.loads(dbutils.widgets.get('event_message'))
 
 # COMMAND ----------
 
+# extract job webhook payload information
 dict = { 
   'model_name': dbutils.widgets.get("model_name"),
   'version': dbutils.widgets.get("version"),
-  'stage': dbutils.widgets.get("stage"),
-  'timestamp': dbutils.widgets.get("timestamp"),
+#   'registered_timestamp': dbutils.widgets.get("event_timestamp"),
   'text': dbutils.widgets.get("text"),
   'webhook_id': dbutils.widgets.get("webhook_id"),
-  'description': dbutils.widgets.get("description")
 }
-
-# COMMAND ----------
-
-from pyspark.sql import Row
-import pyspark.sql.functions as F
-df = spark.createDataFrame(Row(dict)).withColumn("run_ts", F.current_timestamp())
-
-# COMMAND ----------
-
-df.write.format("delta").mode("append").option("mergeSchema", "true").save("/tmp/jchoo/deployment-history/")
-
-# COMMAND ----------
-
-display(spark.read.format("delta").load("/tmp/jchoo/deployment-history/"))
 
 # COMMAND ----------
 
@@ -43,9 +21,15 @@ import pandas as pd
 import os
 import seaborn as sns
 import mlflow
+import pickle
+import veritastool
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+# COMMAND ----------
 
 client = mlflow.tracking.MlflowClient()
-tmp_path = "/FileStore/jeanne/veritas_artifacts/"
+tmp_path = "/FileStore/fairness_artifacts/"
 model_name = "credit_scoring"
 
 def download_artifacts(tmp_path, run_id):
@@ -56,12 +40,8 @@ def download_artifacts(tmp_path, run_id):
     fairness_conc_fp = client.download_artifacts(run_id, "fair_conclusion.json", "/dbfs" + local_dir)
     fairness_metrics_fp = client.download_artifacts(run_id, "fair_metrics.json", "/dbfs" + local_dir)
     perf_metrics_fp = client.download_artifacts(run_id, "perf_metrics.json", "/dbfs" + local_dir)
-    tradeoff_fp = client.download_artifacts(run_id, "tradeoff_metrics.json", "/dbfs" + local_dir)
-
-    print("file downloaded in: {}".format(fairness_conc_fp))
-    print("file downloaded in: {}".format(fairness_metrics_fp))
-    print("file downloaded in: {}".format(perf_metrics_fp))
-    print("file downloaded in: {}".format(tradeoff_fp))
+    tradeoff_fp = client.download_artifacts(run_id, "tradeoff.json", "/dbfs" + local_dir)
+    cre_sco_obj_fp = client.download_artifacts(run_id, "cre_sco_obj.pkl", "/dbfs" + local_dir)
   
     with open(fairness_conc_fp, "r") as file:
       fair_conclusion = json.load(file)
@@ -74,7 +54,10 @@ def download_artifacts(tmp_path, run_id):
   
     with open(tradeoff_fp, "r") as file:
       tradeoff_metrics = json.load(file)
-    return {run_id: {"fair_conclusion": fair_conclusion, "fair_metrics": fair_metrics, "perf_metrics": perf_metrics, "tradeoff_metrics": tradeoff_metrics}}
+      
+    with open(cre_sco_obj_fp, "rb") as f:
+      cs = pickle.load(f)
+    return cs, {run_id: {"fair_conclusion": fair_conclusion, "fair_metrics": fair_metrics, "perf_metrics": perf_metrics, "tradeoff_metrics": tradeoff_metrics}}
   
 def get_current_and_previous_model_run_id(model_name):
     model = client.search_registered_models(filter_string=f"name = '{model_name}'")
@@ -96,16 +79,16 @@ def build_fairness_df(fair_metrics_df_ls, metrics):
         pvar_df['protected_var'] = p
         pvar_df['model_run_id'] = model_run_id
         fairness_dfs.append(pvar_df)
-    return pd.concat(fairness_dfs)
+    return pd.concat(fairness_dfs).reset_index(drop=True)
 
 # COMMAND ----------
 
-latest_model_run_id, previous_model_run_id = get_current_and_previous_model_run_id(model_name)
+latest_model_run_id = get_current_and_previous_model_run_id(dict['model_name'])
 
 # COMMAND ----------
 
-latest_model_metrics = download_artifacts(tmp_path, latest_model_run_id)
-previous_model_metrics = download_artifacts(tmp_path, previous_model_run_id)
+cre_sco_obj, latest_model_metrics = download_artifacts(tmp_path, latest_model_run_id)
+# previous_model_metrics = download_artifacts(tmp_path, previous_model_run_id)
 
 # COMMAND ----------
 
@@ -115,7 +98,28 @@ previous_model_metrics = download_artifacts(tmp_path, previous_model_run_id)
 # COMMAND ----------
 
 metrics = ['demographic_parity', 'equal_opportunity', 'equal_odds']
-build_fairness_df([latest_model_metrics, previous_model_metrics], metrics)
+fairness_df = build_fairness_df([latest_model_metrics], metrics)
+sns.catplot(x="metric", y="parity", hue="metric", col="protected_var", kind="bar", data=fairness_df)
+plt.show()
+
+# COMMAND ----------
+
+# MAGIC %md 
+# MAGIC ## Parity checks
+
+# COMMAND ----------
+
+df = fairness_df[fairness_df['model_run_id']==latest_model_run_id]
+pvars = df['protected_var'].unique()
+
+# COMMAND ----------
+
+for p in pvars:
+  if all(df[df['protected_var']==p]['parity'] > 0.1) == False:
+    client.set_model_version_tag(name=model_name, version=version, key=f"parity_check_{pvar}", value=1)
+    print("Parity checks passed")
+  else:
+    client.set_model_version_tag(name=model_name, version=version, key=f"parity_check_{pvar}", value=0)
 
 # COMMAND ----------
 
@@ -135,16 +139,43 @@ perf_metrics_df
 # COMMAND ----------
 
 # MAGIC %md 
+# MAGIC ## Performance-tradeoff metrics
+
+# COMMAND ----------
+
+cre_sco_obj.tradeoff()
+
+# COMMAND ----------
+
+# MAGIC %md 
 # MAGIC ## Fairness conclusion
 
 # COMMAND ----------
 
-latest_model_metrics[latest_model_run_id]['fair_conclusion']
+pvars = ['SEX', 'MARRIAGE']
+fair_conc = []
+for p in pvars:
+  concl = latest_model_metrics[latest_model_run_id]['fair_conclusion'][p]
+  concl['pvar'] = p
+  fair_conc.append(concl)
+fair_conc_df = pd.DataFrame(fair_conc)
 
 # COMMAND ----------
 
-previous_model_metrics[previous_model_run_id]['fair_conclusion']
+fair_conc_df
 
 # COMMAND ----------
 
+# MAGIC %md 
+# MAGIC ## Save fairness metrics and model metadata into Delta table to keep track of deployment history
 
+# COMMAND ----------
+
+from pyspark.sql import Row
+import pyspark.sql.functions as F
+df = spark.createDataFrame(Row(dict)).withColumn("run_ts", F.current_timestamp())
+df.write.format("delta").mode("append").option("mergeSchema", "true").save("/tmp/jchoo/deployment-history-fairness-metrics/")
+
+# COMMAND ----------
+
+display(spark.read.format("delta").load("/tmp/jchoo/deployment-history/"))
