@@ -78,10 +78,10 @@ pvars = df['protected_var'].unique()
 
 for p in pvars:
   if all(df[df['protected_var']==p]['parity'] > 0.1) == False:
-    client.set_model_version_tag(name=model_name, version=version, key=f"parity_check_{pvar}", value=1)
+    client.set_model_version_tag(name=dict["model_name"], version=dict["version"], key=f"parity_check_{p}", value=1)
     print("Parity checks passed")
   else:
-    client.set_model_version_tag(name=model_name, version=version, key=f"parity_check_{pvar}", value=0)
+    client.set_model_version_tag(name=dict["model_name"], version=dict["version"], key=f"parity_check_{p}", value=0)
 
 # COMMAND ----------
 

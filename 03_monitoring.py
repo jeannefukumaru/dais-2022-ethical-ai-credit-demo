@@ -66,6 +66,34 @@ table_name = monitor.register_baseline_dataset(label_colname="default")
 
 # COMMAND ----------
 
+import pandas as pd
+from databricks.feature_store import FeatureStoreClient
+from pyspark.sql.types import *
+train_02 = pd.read_csv("./data/credit_train_02.csv")
+test_02 = pd.read_csv("./data/credit_test_02.csv")
+new_data = pd.concat([train_02, test_02])
+
+date_colname = "monitoring_date"
+
+new_data = spark.createDataFrame(new_data)
+display(new_data)
+
+# COMMAND ----------
+
+# monitor.add_new_data(new_data, label_colname="default")
+from databricks.feature_store import FeatureStoreClient
+from pyspark.sql.functions import col
+fs = FeatureStoreClient()
+latest_model_version = fetch_model_version("credit_scoring").version
+scoring_model_uri = f"models:/{model_name}/{latest_model_version}"
+label_colname="default"
+
+preds = fs.score_batch(scoring_model_uri, new_data.drop(F.col(label_colname)))
+new_data = preds.join(new_data.select("default", "USER_ID"), on="USER_ID")
+new_data.schema
+
+# COMMAND ----------
+
 # write new data to baseline delta table
 # ordinarily we would define an ETL pipeline to write to the baseline table
 import pandas as pd
@@ -94,15 +122,19 @@ new_data = preds.join(new_data.select("default", "USER_ID"), on="USER_ID")
 new_data = new_data.withColumn(date_colname, F.lit("2022-12-17")) \
                     .withColumn(date_colname, F.to_date(date_colname, "yyyy-MM-dd")) \
                     .withColumn("project_name", F.lit(project_name)) \
-                    .withColumn("model_name", F.lit(model_name)) \
-                    .withColumn("PAY_AMT1", F.col("PAY_AMT1").cast(DoubleType())) \
-                    .withColumn("PAY_AMT2", F.col("PAY_AMT2").cast(DoubleType())) \
-                    .withColumn("PAY_AMT3", F.col("PAY_AMT3").cast(DoubleType())) \
-                    .withColumn("PAY_AMT4", F.col("PAY_AMT4").cast(DoubleType())) \
-                    .withColumn("PAY_AMT5", F.col("PAY_AMT5").cast(DoubleType())) \
-                    .withColumn("PAY_AMT6", F.col("PAY_AMT6").cast(DoubleType()))
+                    .withColumn("model_name", F.lit(model_name)) 
+#                     .withColumn("PAY_AMT1", F.col("PAY_AMT1").cast(DoubleType())) \
+#                     .withColumn("PAY_AMT2", F.col("PAY_AMT2").cast(DoubleType())) \
+#                     .withColumn("PAY_AMT3", F.col("PAY_AMT3").cast(DoubleType())) \
+#                     .withColumn("PAY_AMT4", F.col("PAY_AMT4").cast(DoubleType())) \
+#                     .withColumn("PAY_AMT5", F.col("PAY_AMT5").cast(DoubleType())) \
+#                     .withColumn("PAY_AMT6", F.col("PAY_AMT6").cast(DoubleType()))
 
 new_data.write.mode("append").format("delta").option("mergeSchema", "True").save(table_name)
+
+# COMMAND ----------
+
+display(preds)
 
 # COMMAND ----------
 

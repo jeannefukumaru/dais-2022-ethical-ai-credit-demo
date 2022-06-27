@@ -23,8 +23,8 @@ from utils import *
 
 # COMMAND ----------
 
-train = pd.read_csv("./data/credit_train_01.csv")
-test = pd.read_csv("./data/credit_test_01.csv")
+train = pd.read_csv("./data/credit_train_01(1).csv")
+test = pd.read_csv("./data/credit_test_01(1).csv")
 bronze_data = pd.concat([train, test])
 
 # COMMAND ----------
@@ -405,7 +405,7 @@ RegistryWebhooksClient().list_webhooks(model_name="credit_scoring")
 
 # COMMAND ----------
 
-RegistryWebhooksClient().test_webhook(id='fbeaea9ef1914e29b007751528fb9357')
+RegistryWebhooksClient().test_webhook(id='f815b36ab5db4b6f8d1f5c4eae7b117f')
 
 # COMMAND ----------
 
