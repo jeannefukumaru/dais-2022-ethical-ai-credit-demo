@@ -1,6 +1,7 @@
 # Databricks notebook source
 # MAGIC %md 
-# MAGIC ![recap_demo_workflow](/files/jeanne/recap_demo_workflow_2.png)
+# MAGIC <!-- ![recap_demo_workflow](/files/jeanne/recap_demo_workflow_2.png) -->
+# MAGIC displayHTML("<img src ='/files/jeanne/recap_demo_workflow_2.png'>")
 
 # COMMAND ----------
 

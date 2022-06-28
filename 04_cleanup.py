@@ -20,11 +20,12 @@ cleanup_registered_model("credit_scoring")
 
 # COMMAND ----------
 
-# remove experiment
-model_name="credit_scoring"
-filter_string = "name='{}'".format(model_name)
-results = client.search_registered_models(filter_string=filter_string)
-results
+# clean up any leftover webhooks before creating new ones
+from databricks_registry_webhooks import RegistryWebhooksClient
+whs = RegistryWebhooksClient().list_webhooks(model_name="credit_scoring")
+wh_ids = [w.id for w in whs]
+for id in wh_ids:
+  RegistryWebhooksClient().delete_webhook(id=id)
 
 # COMMAND ----------
 

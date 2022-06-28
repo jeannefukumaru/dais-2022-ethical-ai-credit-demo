@@ -23,8 +23,8 @@ from utils import *
 
 # COMMAND ----------
 
-train = pd.read_csv("./data/credit_train_01(1).csv")
-test = pd.read_csv("./data/credit_test_01(1).csv")
+train = pd.read_csv("./data/credit_train_01.csv")
+test = pd.read_csv("./data/credit_test_01.csv")
 bronze_data = pd.concat([train, test])
 
 # COMMAND ----------
@@ -359,6 +359,7 @@ DBHOST=dbutils.secrets.get(scope = "jeanne_veritas_demo", key = "DBHOST")
 AZFUNC="jeanne-mlflow-azfunc-webhook"
 AZHOOKNAME="MLflowWebHookTransition"
 JOB_ID="1062907355331838"
+SLACK_URL=dbutils.secrets.get(scope = "jeanne_veritas_demo", key = "SLACK_URL")
 
 # COMMAND ----------
 
@@ -386,7 +387,7 @@ job_webhook = RegistryWebhooksClient().create_webhook(
 # COMMAND ----------
 
 slack_http_url_spec = HttpUrlSpec(
- url="https://hooks.slack.com/services/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",
+ url= SLACK_URL,
   secret="secret_string",
   authorization=f"Bearer {PAT}"
 )
@@ -405,7 +406,7 @@ RegistryWebhooksClient().list_webhooks(model_name="credit_scoring")
 
 # COMMAND ----------
 
-RegistryWebhooksClient().test_webhook(id='f815b36ab5db4b6f8d1f5c4eae7b117f')
+RegistryWebhooksClient().test_webhook(id='06a38002854a42248706367a0c142671')
 
 # COMMAND ----------
 
