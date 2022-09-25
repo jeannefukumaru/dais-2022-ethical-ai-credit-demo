@@ -1,4 +1,9 @@
 # Databricks notebook source
+# MAGIC %pip install veritastool
+# MAGIC %pip install databricks_registry_webhooks
+
+# COMMAND ----------
+
 from veritastool.model import ModelContainer
 from veritastool.fairness import CreditScoring
 import pickle
@@ -297,8 +302,7 @@ with mlflow.start_run(run_name="credit_scoring") as run:
   x_train=X_train, x_test =X_test, model_object=pipeline, model_type=model_type,
   model_name=model_name, y_pred=y_pred, y_prob=y_prob)
   
-  cre_sco_obj= CreditScoring(model_params = [container], fair_threshold = 0.43, fair_concern = "eligible", fair_priority = "benefit", fair_impact = "significant", 
-                             perf_metric_name = "balanced_acc", fair_metric_name = "equal_opportunity") 
+  cre_sco_obj= CreditScoring(model_params = [container], fair_threshold = 0.43, fair_concern = "eligible", fair_priority = "benefit", fair_impact = "significant", perf_metric_name = "balanced_acc", fair_metric_name = "equal_opportunity") 
   
   cre_sco_obj.evaluate()
   cre_sco_obj.tradeoff(output=False)
@@ -354,12 +358,10 @@ client.transition_model_version_stage(
 # COMMAND ----------
 
 MODEL_NAME="credit_scoring"
-PAT=dbutils.secrets.get(scope = "jeanne_veritas_demo", key = "PAT")
-DBHOST=dbutils.secrets.get(scope = "jeanne_veritas_demo", key = "DBHOST")
-AZFUNC="jeanne-mlflow-azfunc-webhook"
-AZHOOKNAME="MLflowWebHookTransition"
+PAT=dbutils.secrets.get(scope = "veritas_demo", key = "PAT")
+DBHOST=dbutils.secrets.get(scope = "veritas_demo", key = "DB_HOST")
 JOB_ID="1062907355331838"
-SLACK_URL=dbutils.secrets.get(scope = "jeanne_veritas_demo", key = "SLACK_URL")
+# SLACK_URL=dbutils.secrets.get(scope = "jeanne_veritas_demo", key = "SLACK_URL")
 
 # COMMAND ----------
 
@@ -403,10 +405,6 @@ slack_http_webhook = RegistryWebhooksClient().create_webhook(
 # COMMAND ----------
 
 RegistryWebhooksClient().list_webhooks(model_name="credit_scoring")
-
-# COMMAND ----------
-
-RegistryWebhooksClient().test_webhook(id='06a38002854a42248706367a0c142671')
 
 # COMMAND ----------
 

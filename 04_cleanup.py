@@ -1,4 +1,8 @@
 # Databricks notebook source
+# MAGIC %pip install databricks-registry-webhooks
+
+# COMMAND ----------
+
 import sys
 import os
 sys.path.append(os.path.abspath("/Workspace/Repos/jeanne.choo@databricks.com/dais-2022-ethical-ai-credit-demo/src"))
