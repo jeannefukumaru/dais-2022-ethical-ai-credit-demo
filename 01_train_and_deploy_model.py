@@ -4,8 +4,12 @@
 
 # COMMAND ----------
 
+dbutils.library.restartPython()
+
+# COMMAND ----------
+
 from veritastool.model import ModelContainer
-from veritastool.fairness import CreditScoring
+from veritastool.usecases.credit_scoring import CreditScoring
 import pickle
 import os
 import numpy as np
@@ -54,7 +58,7 @@ bronze.write.mode('overwrite').format('delta').save(BRONZE_DELTA_TABLE_PATH)
 
 # MAGIC %md
 # MAGIC # Clean bronze data and write to silver table
-# MAGIC 
+# MAGIC
 # MAGIC Reduce classes in `Marriage` column from three to 2
 
 # COMMAND ----------
@@ -78,21 +82,16 @@ silver.write.mode('overwrite').format('delta').save(SILVER_DELTA_TABLE_PATH)
 
 # MAGIC %md 
 # MAGIC # Create features with Feature Store 
-# MAGIC 
+# MAGIC
 # MAGIC This [dataset](https://www.kaggle.com/datasets/uciml/default-of-credit-card-clients-dataset) contains information on default payments, demographic factors, credit data, history of payment, and bill statements of credit card clients in Taiwan from April 2005 to September 2005.
-# MAGIC 
+# MAGIC
 # MAGIC ### Payment indicator features
 # MAGIC For the PAY_* columns,   
 # MAGIC (-2=no credit to pay, -1=pay duly, 0=meeting the minimum payment, 1=payment delay for one month, 2=payment delay for two months, … 8=payment delay for eight months, 9=payment delay for nine months and above)
-# MAGIC 
+# MAGIC
 # MAGIC We create a featue called `num_paym_unmet` that sums up the total number of times, over 6 months, that a customer had a delayed payment
-# MAGIC 
+# MAGIC
 # MAGIC We also create a second feature called `num_paym_met` that sums up the total number of times, over 6 months, that a customer met their payment obligations
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC ![feature-store](/files/jeanne/feature_store_table)
 
 # COMMAND ----------
 
@@ -147,7 +146,7 @@ num_paym_met_feature = num_paym_met_fn(silver)
 # COMMAND ----------
 
 # MAGIC %sql
-# MAGIC DROP DATABASE silver_credit_feature_store CASCADE;
+# MAGIC DROP DATABASE IF EXISTS silver_credit_feature_store CASCADE;
 # MAGIC CREATE DATABASE IF NOT EXISTS silver_credit_feature_store
 
 # COMMAND ----------
@@ -229,8 +228,8 @@ training_df = training_set.load_df()
 
 # MAGIC %md
 # MAGIC # Begin model training
-# MAGIC 
-# MAGIC ![veritas](/files/jeanne/veritas.png)
+# MAGIC
+# MAGIC ![veritas](/files/jeanne_choo@databricks.com/dais-2022/veritas.png)
 
 # COMMAND ----------
 
@@ -262,13 +261,15 @@ pipeline
 # MAGIC %md 
 # MAGIC ### Define protected variables and groups
 # MAGIC In this example we set SEX and MARRIAGE status to be protected variables  
-# MAGIC 
+# MAGIC
 # MAGIC Within those protected variables, we also choose which are the privileged  groups. In the case of the `SEX` variable, this is the “male” segment, and in the case of the `MARRIAGE` variable, this is the “married” segment. 
 
 # COMMAND ----------
 
-p_var = ['SEX', 'MARRIAGE']
+# p_var = ['SEX', 'MARRIAGE']
+# p_grp = {'SEX': [1], 'MARRIAGE':[1]}
 p_grp = {'SEX': [1], 'MARRIAGE':[1]}
+up_grp = {'SEX': [2], 'MARRIAGE':[2]}
 
 # COMMAND ----------
 
@@ -296,13 +297,19 @@ with mlflow.start_run(run_name="credit_scoring") as run:
   y_prob = np.array(np.max(pipeline.predict_proba(X_test), axis=1))
 
   model_name = "credit scoring"
-  model_type = "credit"
+  model_type = "classification"
 
-  container = ModelContainer(y_true=y_true, y_train=y_train, p_var=p_var, p_grp=p_grp, 
-  x_train=X_train, x_test =X_test, model_object=pipeline, model_type=model_type,
-  model_name=model_name, y_pred=y_pred, y_prob=y_prob)
+  # container = ModelContainer(y_true=y_true, y_train=y_train, p_var=p_var, p_grp=p_grp, 
+  # x_train=X_train, x_test =X_test, model_object=pipeline, model_type=model_type,
+  # model_name=model_name, y_pred=y_pred, y_prob=y_prob)
+
+  container = ModelContainer(y_true, p_grp, model_type, model_name, y_pred, y_prob, y_train, x_train=X_train, \
+                           x_test=X_test, model_object=pipeline, up_grp=up_grp)
   
-  cre_sco_obj= CreditScoring(model_params = [container], fair_threshold = 0.43, fair_concern = "eligible", fair_priority = "benefit", fair_impact = "significant", perf_metric_name = "balanced_acc", fair_metric_name = "equal_opportunity") 
+  # cre_sco_obj= CreditScoring(model_params = [container], fair_threshold = 0.43, fair_concern = "eligible", fair_priority = "benefit", fair_impact = "significant", perf_metric_name = "balanced_acc", fair_metric_name = "equal_opportunity") 
+  cre_sco_obj= CreditScoring(model_params = [container], fair_threshold = 80, fair_concern = "eligible", \
+                           fair_priority = "benefit", fair_impact = "normal", perf_metric_name="accuracy", \
+                           tran_row_num = [20,40], tran_max_sample = 1000, tran_pdp_feature = ['LIMIT_BAL'], tran_max_display = 10)
   
   cre_sco_obj.evaluate()
   cre_sco_obj.tradeoff(output=False)
@@ -338,7 +345,7 @@ client.transition_model_version_stage(
 # COMMAND ----------
 
 # MAGIC %md 
-# MAGIC ![reproducible](/files/jeanne/reproducible.png)
+# MAGIC ![reproducible](/files/jeanne_choo@databricks.com/dais-2022/reproducible.png)
 
 # COMMAND ----------
 
@@ -348,7 +355,7 @@ client.transition_model_version_stage(
 # COMMAND ----------
 
 # MAGIC %md 
-# MAGIC ![recap](/files/jeanne/recap_demo_workflow_1.png)
+# MAGIC ![recap](/files/jeanne_choo@databricks.com/dais-2022/DAIS_2022_ethical_credit_scoring_demo_workflow.png)
 
 # COMMAND ----------
 
@@ -360,7 +367,7 @@ client.transition_model_version_stage(
 MODEL_NAME="credit_scoring"
 PAT=dbutils.secrets.get(scope = "veritas_demo", key = "PAT")
 DBHOST=dbutils.secrets.get(scope = "veritas_demo", key = "DB_HOST")
-JOB_ID="1062907355331838"
+JOB_ID="195385049869666"
 # SLACK_URL=dbutils.secrets.get(scope = "jeanne_veritas_demo", key = "SLACK_URL")
 
 # COMMAND ----------
@@ -411,3 +418,7 @@ RegistryWebhooksClient().list_webhooks(model_name="credit_scoring")
 # MAGIC %md 
 # MAGIC # Request model transition to Production
 # MAGIC (show through the UI)
+
+# COMMAND ----------
+
+

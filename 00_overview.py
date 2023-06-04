@@ -5,20 +5,15 @@
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ![features](/files/jeanne/system_features.png)
-
-# COMMAND ----------
-
-# MAGIC %md 
-# MAGIC ![workflow](/files/jeanne/demo_workflow.png)
+# MAGIC ![features](/files/jeanne_choo@databricks.com/dais-2022/DAIS_2022_ethical_credit_scoring_demo_workflow.png)
 
 # COMMAND ----------
 
 # MAGIC %md
 # MAGIC # Use case
-# MAGIC 
+# MAGIC
 # MAGIC Our training dataset is the default of credit card clients data set taken from the [UCI Machine Learning Repository](https://archive.ics.uci.edu/ml/datasets/default+of+credit+card+clients)
-# MAGIC 
+# MAGIC
 # MAGIC The dataset's independent variables include credit payment history from August 2005 to September 2005 with demographic features such as SEX and EDUCATION. The response variable is a binary indicator (1 or 0) stating whether or not a customer will default on his or her credit payment in the subsequent month (October 2005)
 
 # COMMAND ----------
@@ -26,7 +21,7 @@
 # MAGIC %md 
 # MAGIC ### Dataset attribute information
 # MAGIC source: [Kaggle](https://www.kaggle.com/datasets/uciml/default-of-credit-card-clients-dataset)
-# MAGIC 
+# MAGIC
 # MAGIC - **ID**: ID of each client
 # MAGIC - **LIMIT_BAL**: Amount of given credit in NT dollars (includes individual and family/supplementary credit
 # MAGIC - **SEX**: Gender (1=male, 2=female)

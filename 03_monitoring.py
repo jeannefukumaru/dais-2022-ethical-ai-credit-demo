@@ -5,9 +5,42 @@ sys.path.append(os.path.abspath("/Workspace/Repos/jeanne.choo@databricks.com/dai
 
 # COMMAND ----------
 
+from evidently import ColumnMapping
+from evidently.report import Report
+from evidently.metric_preset import DataDriftPreset
+from evidently.metric_preset import DataQualityPreset
+from evidently.metric_preset import RegressionPreset
+from evidently.metric_preset import ClassificationPreset
+from evidently.metric_preset import TargetDriftPreset
+
+# COMMAND ----------
+
+import pandas as pd
+import numpy as np
+
+from sklearn import datasets, ensemble, model_selection
+
+# COMMAND ----------
+
+#Dataset for Data Quality and Integrity
+adult_data = datasets.fetch_openml(name='adult', version=2, as_frame='auto')
+adult = adult_data.frame
+
+adult_ref = adult[~adult.education.isin(['Some-college', 'HS-grad', 'Bachelors'])]
+adult_cur = adult[adult.education.isin(['Some-college', 'HS-grad', 'Bachelors'])]
+
+adult_cur.iloc[:2000, 3:5] = np.nan
+data_drift_report = Report(metrics=[
+    DataDriftPreset(num_stattest='ks', cat_stattest='psi', num_stattest_threshold=0.2, cat_stattest_threshold=0.2),
+])
+
+data_drift_report.run(reference_data=adult_ref, current_data=adult_cur)
+data_drift_report.show(mode="inline")
+
+# COMMAND ----------
+
 from modmon import ModMon, ModMonDatasetDrift, ModMonDatasetQuality, ModMonLabelDrift
 from utils import *
-from evidently.dashboard.tabs import CatTargetDriftTab
 import pandas as pd
 import datetime
 from pyspark.sql import functions as F
@@ -19,20 +52,20 @@ from utils import *
 # COMMAND ----------
 
 # MAGIC %md 
-# MAGIC ![recep_demo_workflow](/files/jeanne/recap_demo_workflow_3.png)
+# MAGIC ![recep_demo_workflow](/files/jeanne_choo@databricks.com/dais-2022/DAIS_2022_ethical_credit_scoring_demo_workflow.png)
 
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC TODO: flesh this out more
+# MAGIC
 # MAGIC ## Monitoring overview
 # MAGIC A general monitoring framework basically consists of:  
 # MAGIC - a reference dataset (this is the baseline we want to compare new data against)
 # MAGIC - new, incoming data (here we will cal this the "production" dataset) that will be compared against the reference dataset
 # MAGIC - drift statistics for labels, features and data (a p < 0.05 indicates that the reference distribution is significantly different from the incoming distribution)
 # MAGIC - visualisations to detect drift or data issues that statistics may not capture
-# MAGIC 
-# MAGIC ![monitoring](/files/jeanne/model_monitoring_flowchart.png)
+# MAGIC
+# MAGIC ![monitoring](/files/jeanne_choo@databricks.com/dais-2022/model_monitoring_flowchart.png)
 
 # COMMAND ----------
 
@@ -57,6 +90,10 @@ monitor = ModMon(project_name, model_name)
 # COMMAND ----------
 
 table_name = monitor.register_baseline_dataset(label_colname="default")
+
+# COMMAND ----------
+
+display(spark.read.load("dbfs:/FileStore/fairness_monitoring/credit_scoring.delta"))
 
 # COMMAND ----------
 
@@ -91,7 +128,7 @@ preds = fs.score_batch(scoring_model_uri, new_data.drop(F.col(label_colname)))
 new_data = preds.join(new_data.select("default", "USER_ID"), on="USER_ID")
         
 # add metadata columns to new data
-new_data = new_data.withColumn(date_colname, F.lit("2022-12-17")) \
+new_data = new_data.withColumn(date_colname, F.lit("2023-12-17")) \
                     .withColumn(date_colname, F.to_date(date_colname, "yyyy-MM-dd")) \
                     .withColumn("project_name", F.lit(project_name)) \
                     .withColumn("model_name", F.lit(model_name)) \
@@ -111,9 +148,9 @@ new_data.write.mode("append").format("delta").option("mergeSchema", "True").save
 
 # COMMAND ----------
 
-ref_start_end = ("2022-01-01", "2022-06-30")
-prod_start_end = ("2022-07-01", "2022-12-31")
-# ref, prod = monitor.get_ref_prod_datasets(table_name, ref_start_end, prod_start_end)
+ref_start_end = ("2023-01-01", "2023-12-01")
+prod_start_end = ("2023-07-01", "2023-12-31")
+ref, prod = monitor.get_ref_prod_datasets(table_name, ref_start_end, prod_start_end)
 
 # COMMAND ----------
 
@@ -131,25 +168,12 @@ prod = monitor_df.where((F.col(date_colname) > prod_start_end[0]) & (F.col(date_
 
 # COMMAND ----------
 
-dataset_drift = ModMonDatasetDrift(prod, ref)
+data_drift_and_target_drift_report = Report(metrics=[
+    DataDriftPreset(num_stattest='ks', cat_stattest='psi', num_stattest_threshold=0.2, cat_stattest_threshold=0.2),TargetDriftPreset()
+])
 
-# COMMAND ----------
-
-from evidently.pipeline.column_mapping import ColumnMapping
-
-column_mapping = ColumnMapping()
-
-column_mapping.target = 'default' #'y' is the name of the column with the target function
-column_mapping.datetime = 'monitoring_date' #'date' is the name of the column with datetime 
-
-column_mapping.numerical_features = ['LIMIT_BAL', 'AGE'] #list of numerical features
-
-column_mapping.categorical_features = ['SEX','EDUCATION','MARRIAGE']
-
-# COMMAND ----------
-
-dataset_drift.report_dataset_drift(column_mapping).show(mode="inline")
-
+data_drift_and_target_drift_report.run(reference_data=ref, current_data=prod)
+data_drift_and_target_drift_report.show(mode="inline")
 
 # COMMAND ----------
 
@@ -158,29 +182,27 @@ dataset_drift.report_dataset_drift(column_mapping).show(mode="inline")
 
 # COMMAND ----------
 
-dataset_drift_data = dataset_drift.save_dataset_drift_data(column_mapping, project_name, model_name)
+drift_profile = data_drift_and_target_drift_report.as_dict()
 
 # COMMAND ----------
 
-label_drift = ModMonLabelDrift(ref, prod)
-label_drift.report_label_drift(CatTargetDriftTab, column_mapping).show(mode="inline")
+drift_profile_df = pd.DataFrame(drift_profile["metrics"][0]["result"], index=[0])
+drift_profile_df["evidently_preset"] = "DataDriftPreset"
 
 # COMMAND ----------
 
-# MAGIC %md
-# MAGIC ### Save label drift statistics into a Delta table for tracking
+profile_pyspark = spark.createDataFrame(drift_profile_df)
+profile_pyspark = profile_pyspark.withColumn("date", F.current_date()) \
+                                         .withColumn("project_name", F.lit(project_name)) \
+                                         .withColumn("model_name", F.lit(model_name))
+        
+output_table = f"dbfs:/{project_name}_monitoring/{model_name}_label_drift.delta"
+profile_pyspark.write.format("delta").mode("append").save(output_table)
+print(f"label drift data written to {output_table}")
 
 # COMMAND ----------
 
-from evidently.model_profile.sections import (
-    DataDriftProfileSection,
-    CatTargetDriftProfileSection,
-    NumTargetDriftProfileSection
-)
-
-# COMMAND ----------
-
-label_drift.save_label_drift_data(CatTargetDriftProfileSection(), column_mapping, project_name, model_name)
+display(spark.read.load("dbfs:/fairness_monitoring/credit_scoring_label_drift.delta"))
 
 # COMMAND ----------
 

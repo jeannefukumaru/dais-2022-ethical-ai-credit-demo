@@ -1,19 +1,13 @@
 import json as js
-from evidently.dashboard import Dashboard
-from evidently.dashboard.tabs import (
-    DataDriftTab,
-    CatTargetDriftTab,
-    NumTargetDriftTab,
-    DataQualityTab
-)
 
-from evidently.model_profile import Profile
-from evidently.model_profile.sections import (
-    DataDriftProfileSection,
-    CatTargetDriftProfileSection,
-    NumTargetDriftProfileSection
-)
-from evidently.pipeline.column_mapping import ColumnMapping   
+from evidently import ColumnMapping
+from evidently.report import Report
+from evidently.metric_preset import DataDriftPreset
+from evidently.metric_preset import DataQualityPreset
+from evidently.metric_preset import RegressionPreset
+from evidently.metric_preset import ClassificationPreset
+from evidently.metric_preset import TargetDriftPreset
+
 import json
 import pandas as pd
 import numpy as np

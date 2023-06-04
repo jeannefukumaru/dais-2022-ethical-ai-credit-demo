@@ -1,7 +1,7 @@
 # Databricks notebook source
 # MAGIC %md 
 # MAGIC <!-- ![recap_demo_workflow](/files/jeanne/recap_demo_workflow_2.png) -->
-# MAGIC displayHTML("<img src ='/files/jeanne/recap_demo_workflow_2.png'>")
+# MAGIC displayHTML("<img src ='files/jeanne_choo@databricks.com/dais-2022/DAIS_2022_ethical_credit_scoring_demo_workflow.png'>")
 
 # COMMAND ----------
 
@@ -30,6 +30,8 @@ dict = {
   'webhook_id': registry_event["webhook_id"],
 }
 
+# dict = {"model_name":"credit_scoring","from_stage":"Staging","webhook_id":"7aa8933eeac14c2fa110ee0dcfb86360"}
+
 # COMMAND ----------
 
 from mlflow.tracking import MlflowClient
@@ -51,7 +53,7 @@ model_name = "credit_scoring"
 
 # COMMAND ----------
 
-latest_model_run_id = get_current_and_previous_model_run_id(dict['model_name'])
+latest_model_run_id = get_current_and_previous_model_run_id(dict['model_name'])[0]
 
 # COMMAND ----------
 
@@ -135,19 +137,23 @@ fair_conc_df
 
 # COMMAND ----------
 
+import os
+path = "/dbfs:/FileStore/fairness/"
+isExist = os.path.exists(path)
+if not isExist:
+   os.makedirs(path)
+   print("The new directory is created!")
+
+# COMMAND ----------
+
 from pyspark.sql import Row
 import pyspark.sql.functions as F
 df = spark.createDataFrame(Row(dict)).withColumn("run_ts", F.current_timestamp())
-df.write.format("delta").mode("append").option("mergeSchema", "true").save("/dbfs:/FileStore/fairness/deployment-history-fairness-metrics.delta")
+df.write.format("delta").mode("append").option("mergeSchema", "true").save("dbfs:/FileStore/fairness/deployment-history-fairness-metrics.delta")
 
 # COMMAND ----------
 
-display(spark.read.format("delta").load("/dbfs:/FileStore/fairness/deployment-history-fairness-metrics.delta"))
-
-# COMMAND ----------
-
-# MAGIC %md 
-# MAGIC ![quant_fairness](/files/jeanne/quantified_fairness.png)
+display(spark.read.format("delta").load("dbfs:/FileStore/fairness/deployment-history-fairness-metrics.delta"))
 
 # COMMAND ----------
 
